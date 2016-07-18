@@ -339,28 +339,16 @@ def main():
     path, filename = os.path.split(full_path)
     pokemonsJSON = json.load(open(path + '/pokemon.json'))
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-u", "--username", help="PTC Username", required=False)
-    parser.add_argument("-p", "--password", help="PTC Password", required=False)
-    parser.add_argument("-l", "--location", type=parse_unicode, help="Location", required=False)
-    parser.add_argument("-st", "--step_limit", help="Steps", required=False)
-    parser.add_argument("-d", "--debug", help="Debug Mode", action='store_true')
-    parser.set_defaults(DEBUG=True)
-    args = parser.parse_args()
 
-    if not os.path.isfile('config.ini'):
-        debug("No suitable config file found. Please copy config.ini.sample to config.ini, and edit to suit your needs")
-        sys.exit()
     configparser = ConfigParser.ConfigParser()
     configparser.read(['config.ini'])
     config = {}
-    config['username'] = args.username or configparser.get("Player", "username")
-    config['password'] = args.password or configparser.get("Player", "password")
-    config['step_limit'] = args.step_limit or configparser.get("Search", "steps")
-    config['location'] = args.location or configparser.get("Search", "location").decode()
-    config['debug'] = args.debug or configparser.get("System", "debug")
+    config['username'] = configparser.get("Player", "username")
+    config['password'] = configparser.get("Player", "password")
+    config['step_limit'] = configparser.get("Search", "steps")
+    config['location'] = configparser.get("Search", "location").decode()
+    config['debug'] = configparser.get("System", "debug")
 
-    default_location = args.location
     if config['debug']:
         global DEBUG
         DEBUG = True
@@ -551,5 +539,9 @@ def fullmap():
 
 
 if __name__ == "__main__":
+    if not os.path.isfile('config.ini'):
+        debug("No suitable config file found. Please copy config.ini.sample to config.ini, then update to suit your needs")
+        sys.exit()
+
     register_background_thread(initial_registration=True)
     app.run(debug=True)
