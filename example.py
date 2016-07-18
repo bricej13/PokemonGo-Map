@@ -12,6 +12,7 @@ import time
 import requests
 import argparse
 import threading
+import ConfigParser
 
 import werkzeug.serving
 
@@ -53,19 +54,22 @@ api_endpoint = None
 pokemons = []
 gyms = []
 pokestops = []
-numbertoteam = {0: "Gym", 1: "Mystic", 2: "Valor", 3: "Instinct"} # At least I'm pretty sure that's it. I could be wrong and then I'd be displaying the wrong owner team of gyms.
-
+numbertoteam = {0: "Gym", 1: "Mystic", 2: "Valor",
+                3: "Instinct"}  # At least I'm pretty sure that's it. I could be wrong and then I'd be displaying the wrong owner team of gyms.
 
 # stuff for in-background search thread
 search_thread = None
+
 
 def parse_unicode(bytestring):
     decoded_string = bytestring.decode(sys.getfilesystemencoding())
     return decoded_string
 
+
 def debug(message):
     if DEBUG:
         print('[-] {}'.format(message))
+
 
 def time_left(ms):
     s = ms / 1000
@@ -336,23 +340,35 @@ def main():
     pokemonsJSON = json.load(open(path + '/pokemon.json'))
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("-u", "--username", help="PTC Username", required=True)
-    parser.add_argument("-p", "--password", help="PTC Password", required=True)
-    parser.add_argument("-l", "--location", type=parse_unicode, help="Location", required=True)
-    parser.add_argument("-st", "--step_limit", help="Steps", required=True)
+    parser.add_argument("-u", "--username", help="PTC Username", required=False)
+    parser.add_argument("-p", "--password", help="PTC Password", required=False)
+    parser.add_argument("-l", "--location", type=parse_unicode, help="Location", required=False)
+    parser.add_argument("-st", "--step_limit", help="Steps", required=False)
     parser.add_argument("-d", "--debug", help="Debug Mode", action='store_true')
     parser.set_defaults(DEBUG=True)
     args = parser.parse_args()
 
+    if not os.path.isfile('config.ini'):
+        debug("No suitable config file found. Please copy config.ini.sample to config.ini, and edit to suit your needs")
+        sys.exit()
+    configparser = ConfigParser.ConfigParser()
+    configparser.read(['config.ini'])
+    config = {}
+    config['username'] = args.username or configparser.get("Player", "username")
+    config['password'] = args.password or configparser.get("Player", "password")
+    config['step_limit'] = args.step_limit or configparser.get("Search", "steps")
+    config['location'] = args.location or configparser.get("Search", "location").decode()
+    config['debug'] = args.debug or configparser.get("System", "debug")
+
     default_location = args.location
-    if args.debug:
+    if config['debug']:
         global DEBUG
         DEBUG = True
         print('[!] DEBUG mode on')
 
-    retrying_set_location(args.location)
+    retrying_set_location(config['location'])
 
-    access_token = get_token(args.username, args.password)
+    access_token = get_token(config['username'], config['password'])
     if access_token is None:
         print('[-] Wrong username/password')
         return
@@ -386,14 +402,14 @@ def main():
 
     origin = LatLng.from_degrees(FLOAT_LAT, FLOAT_LONG)
     steps = 0
-    steplimit = int(args.step_limit)
+    steplimit = int(config['step_limit'])
     pos = 1
-    x   = 0
-    y   = 0
-    dx  = 0
-    dy  = -1
-    while steps < steplimit**2:
-        debug("looping: step {} of {}".format(steps, steplimit**2))
+    x = 0
+    y = 0
+    dx = 0
+    dy = -1
+    while steps < steplimit ** 2:
+        debug("looping: step {} of {}".format(steps, steplimit ** 2))
         original_lat = FLOAT_LAT
         original_long = FLOAT_LONG
         parent = CellId.from_lat_lng(LatLng.from_degrees(FLOAT_LAT, FLOAT_LONG)).parent(15)
@@ -434,14 +450,14 @@ def main():
             label = '<b>%s</b> [%s remaining]' % (pokemonsJSON[poke.pokemon.PokemonId - 1]['Name'], left)
             pokemons.append([poke.pokemon.PokemonId, label, poke.Latitude, poke.Longitude])
 
-        #Scan location math
-        if (-steplimit/2 < x <= steplimit/2) and (-steplimit/2 < y <= steplimit/2):
-            set_location_coords((x * 0.0025) + deflat, (y * 0.0025 ) + deflng, 0)
-        if x == y or (x < 0 and x == -y) or (x > 0 and x == 1-y):
+        # Scan location math
+        if (-steplimit / 2 < x <= steplimit / 2) and (-steplimit / 2 < y <= steplimit / 2):
+            set_location_coords((x * 0.0025) + deflat, (y * 0.0025) + deflng, 0)
+        if x == y or (x < 0 and x == -y) or (x > 0 and x == 1 - y):
             dx, dy = -dy, dx
-        x, y = x+dx, y+dy
-        steps +=1
-        print("Completed:", ((steps + (pos * .25) - .25) / steplimit**2) * 100, "%")
+        x, y = x + dx, y + dy
+        steps += 1
+        print("Completed:", ((steps + (pos * .25) - .25) / steplimit ** 2) * 100, "%")
 
     register_background_thread()
 
@@ -483,6 +499,7 @@ def create_app():
     GoogleMaps(app, key=GOOGLEMAPS_KEY)
     return app
 
+
 app = create_app()
 
 
@@ -493,15 +510,16 @@ def fullmap():
         currLat, currLon = pokemon[-2], pokemon[-1]
         pokeMarkers.append(
             {
-                'icon': 'static/icons/'+str(pokemon[0])+'.png',
+                'icon': 'static/icons/' + str(pokemon[0]) + '.png',
                 'lat': currLat,
                 'lng': currLon,
-                'infobox': '<center><i>#'+str(pokemon[0])+'</i><br>'+pokemon[1].replace('0 hours ','').replace('0 minutes ','')+'</center>'
+                'infobox': '<center><i>#' + str(pokemon[0]) + '</i><br>' + pokemon[1].replace('0 hours ', '').replace(
+                    '0 minutes ', '') + '</center>'
             })
     for gym in gyms:
         pokeMarkers.append(
             {
-                'icon': 'static/forts/'+numbertoteam[gym[0]]+'.png',
+                'icon': 'static/forts/' + numbertoteam[gym[0]] + '.png',
                 'lat': gym[1],
                 'lng': gym[2],
                 'infobox': "Gym owned by team " + numbertoteam[gym[0]]

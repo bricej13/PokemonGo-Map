@@ -1,0 +1,11 @@
+[Player]
+username:george
+password:iwasinthepool
+
+[Search]
+steps: 5
+location: Death Valley, CA
+
+[System]
+debug: False
+
